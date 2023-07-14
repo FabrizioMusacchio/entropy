@@ -10,13 +10,17 @@ For reproducibility:
 conda create -n entropy -y python=3.9
 conda activate entropy
 conda install -y mamba
-mamba install -y ipykernel numpy matplotlib
+mamba install -y ipykernel numpy matplotlib scipy
 ```
 """
 # %% IMPORTS
 import numpy as np
 import matplotlib.pyplot as plt
-# %% VARYING THE NUMBER OF MICROSTATES
+from scipy.stats import gaussian_kde
+# %% ENTROPY AS A FUNCTION OF MICROSTATES
+import numpy as np
+import matplotlib.pyplot as plt
+
 def calculate_entropy(microstates):
     entropy = np.log(microstates)
     return entropy
@@ -35,8 +39,6 @@ plt.plot(range(len(microstates)), entropy)
 plt.xlabel("System")
 plt.ylabel("Entropy")
 plt.title("Entropy of the Gas Particle System")
-plt.tight_layout()
-plt.savefig("entropy.png", dpi=200)
 plt.show()
 # %% TIME EVOLUTION OF THE ENTROPY
 
@@ -73,73 +75,164 @@ plt.title("Entropy of the Gas Particle System over Time")
 plt.tight_layout()
 plt.savefig("entropy_time.png", dpi=200)
 plt.show()
-# %% EXAMPLE FOR A SYSTEM WITH GIVEN NUMBER OF PARTICLES
+# %% ENTROPY FOR TWO CLOSED SYSTEMS
+# re-defining the entropy function:
+def entropy(probs):
+    return -np.sum(probs * np.log(probs))
 
-# redefine the function to calculate entropy:
-def calculate_entropy_new(microstates):
-    probabilities = microstates / np.sum(microstates)
-    entropy = -np.sum(probabilities * np.log2(probabilities))
+# Set random seed for reproducibility
+np.random.seed(42)
+
+# Number of particles
+n = 10
+
+# Generate particle positions for first box
+x1 = np.random.normal(loc=0.5, scale=0.1, size=n)
+y1 = np.random.normal(loc=0.5, scale=0.1, size=n)
+
+# Generate particle positions for second box
+x2 = np.random.uniform(size=n)
+y2 = np.random.uniform(size=n)
+
+# Calculate probability density for first box
+kde1 = gaussian_kde(np.vstack([x1, y1]))
+xgrid, ygrid = np.mgrid[0:1:100j, 0:1:100j]
+probs1 = kde1(np.vstack([xgrid.ravel(), ygrid.ravel()]))
+probs1 /= probs1.sum()
+
+# Calculate probability density for second box
+kde2 = gaussian_kde(np.vstack([x2, y2]))
+probs2 = kde2(np.vstack([xgrid.ravel(), ygrid.ravel()]))
+probs2 /= probs2.sum()
+
+# Calculate entropy for each box
+entropy1 = entropy(probs1)
+entropy2 = entropy(probs2)
+
+# Create figure and axes
+fig, (ax1, ax2) = plt.subplots(ncols=2)
+
+# Plot particle positions and probability density for first box
+ax1.scatter(x1, y1)
+im1 = ax1.imshow(np.fliplr(probs1.reshape(xgrid.shape)), origin='upper', extent=[0, 1, 0, 1])
+ax1.set_title(f'System 1: Entropy = {entropy1:.3f}')
+cbar1 = plt.colorbar(im1, ax=ax1, orientation='horizontal', label='Probability Density')
+cbar1.ax.set_xticklabels(cbar1.ax.get_xticklabels(), rotation=90)
+ticks = np.linspace(im1.get_clim()[0], im1.get_clim()[1], 4)
+cbar1.set_ticks(ticks)
+
+# Plot particle positions and probability density for second box
+ax2.scatter(x2, y2)
+im2 = ax2.imshow(np.fliplr(probs2.reshape(xgrid.shape)), origin='upper', extent=[0, 1, 0, 1])
+ax2.set_title(f'System 2: Entropy = {entropy2:.3f}')
+cbar2 = plt.colorbar(im2, ax=ax2, orientation='horizontal', label='Probability Density')
+cbar2.ax.set_xticklabels(cbar2.ax.get_xticklabels(), rotation=90)
+ticks = np.linspace(im2.get_clim()[0], im2.get_clim()[1], 4)
+cbar2.set_ticks(ticks)
+plt.tight_layout()
+plt.savefig("entropy_two_systems.png", dpi=200)
+plt.show()
+# %% ENTROPY FOR DIFFERENT NUMBER OF PARTICLES AS A FUNCTION OF TIME
+
+def calculate_entropy(particles):
+    """Calculate the entropy of a system of particles."""
+    # Calculate the histogram of particle positions
+    hist, _ = np.histogram(particles, bins=10, range=(0, 1), density=True)
+    
+    # Calculate the probabilities
+    probs = hist / hist.sum()
+    
+    # Calculate the entropy
+    entropy = -np.sum(probs * np.log(probs + 1e-9))
+    
     return entropy
 
 # Set random seed for reproducibility
-np.random.seed(41)
+np.random.seed(42)
 
-# Define the number of particles
-num_particles_list = [10, 20, 30]
+# Number of time steps
+T = 100
 
-# Initialize the gas particle systems
-time_steps = 61  # 60 seconds + 1 (for indexing)
-microstates_scaling_factor = [1, 1, 1]  # Adjust this factor to control entropy growth
+# Number of particles
+N_values = [10, 25, 200]
 
-# Simulate the evolution and calculate entropy for different numbers of particles
-entropy_data = []
-for i, num_particles in enumerate(num_particles_list):
-    microstates = [np.random.randint(1, 100, num_particles)]  # Initial microstates
+# Create figure
+fig, ax = plt.subplots()
 
-    # Simulate the evolution of the gas particle system
-    for t in range(1, time_steps):
-        # Gradually increase the number of microstates over time with scaling factor
-        scaling_factor = microstates_scaling_factor[i]
-        new_microstates = microstates[t-1] + scaling_factor * np.random.randint(1, 10, num_particles)
-        microstates.append(new_microstates)
+# Loop over number of particles
+for N in N_values:
+    # Initialize particle positions
+    particles = np.random.uniform(size=N)
 
-    # Calculate entropy using probabilities based on Boltzmann distribution
-    entropy = np.zeros(time_steps)
-    for t in range(time_steps):
-        entropy[t] = calculate_entropy_new(microstates[t])
+    # Initialize entropy array
+    S = np.zeros(T)
 
-    entropy_data.append(entropy)
+    # Loop over time steps
+    for t in range(T):
+        # Update particle positions
+        particles += 0.01 * np.random.randn(N)
 
-# Plotting the entropy over time for different numbers of particles
-time = np.arange(0, time_steps)  # Time in seconds
-for i, num_particles in enumerate(num_particles_list):
-    plt.plot(time, entropy_data[i], label=f"N={num_particles}")
-plt.xlabel("Time (seconds)")
-plt.ylabel("Entropy")
-plt.title("Entropy of Gas Particle Systems over Time")
-plt.legend()
+        # Calculate entropy
+        S[t] = calculate_entropy(particles)
+
+    # Plot entropy vs time
+    ax.plot(S, label=f'N={N}')
+
+# Add legend and labels
+ax.legend()
+ax.set_xlabel('Time')
+ax.set_ylabel('Entropy')
 plt.tight_layout()
-plt.savefig("entropy_time_N.png", dpi=200)
+plt.savefig("entropy_different_number_particles.png", dpi=200)
 plt.show()
-# %% ENTROPY CHANGE FOR
-# define entropy change function:
-def calculate_entropy_change(heat, temperature):
-    entropy_change = np.cumsum(heat / temperature)
-    return entropy_change
+# %% INCREASING ENTROPY FOR DIFFERENT NUMBER OF PARTICLES AS A FUNCTION OF TIME
 
-# Sample data for heat and temperature
-heat = np.array([10, 15, 20, 12, 8])  # Infinitesimal heat changes
-temperature = np.array([300, 310, 320, 330, 340])  # Corresponding temperatures
+def entropy(probs):
+    return -np.sum(probs * np.log(probs))
 
-# Calculate entropy change
-entropy_change = calculate_entropy_change(heat, temperature)
+# Set random seed for reproducibility
+np.random.seed(42)
 
-# Plotting the entropy change
-plt.plot(range(len(entropy_change)), entropy_change)
-plt.xlabel("Time")
-plt.ylabel("Entropy Change")
-plt.title("Entropy Change with Temperature Variation")
-plt.tight_layout()
-plt.savefig("entropy_change.png", dpi=200)
+# Number of time steps
+T = 100
+
+# Number of particles
+N_values = [10, 20, 100]
+
+# Create figure
+fig, ax = plt.subplots()
+
+# Loop over number of particles
+for N in N_values:
+    # Initialize particle positions
+    x = np.random.normal(loc=0.5, scale=0.1, size=N)
+    y = np.random.normal(loc=0.5, scale=0.1, size=N)
+
+    # Initialize entropy array
+    S = np.zeros(T)
+
+    # Loop over time steps
+    for t in range(T):
+        # Update particle positions
+        x += 0.1 * np.random.randn(N)
+        y += 0.1 * np.random.randn(N)
+
+        # Calculate probability density
+        kde = gaussian_kde(np.vstack([x, y]))
+        xgrid, ygrid = np.mgrid[0:1:100j, 0:1:100j]
+        probs = kde(np.vstack([xgrid.ravel(), ygrid.ravel()]))
+        probs /= probs.sum()
+
+        # Calculate entropy
+        S[t] = entropy(probs)
+
+    # Plot entropy vs time
+    ax.plot(S, label=f'N={N}')
+
+# Add legend and labels
+ax.legend()
+ax.set_xlabel('Time')
+ax.set_ylabel('Entropy')
+
 plt.show()
 # %% END
